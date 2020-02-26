@@ -19,19 +19,11 @@ function(cxx_test name sources)
   endif(GTEST_FOUND)
 endfunction()
 
-if (CMAKE_USE_WIN32_THREADS_INIT)
-    set(PLATFORM_SUFFIX "windows")
-elseif (CMAKE_USE_PTHREADS_INIT)
-    set(PLATFORM_SUFFIX "pthread")
-else (CMAKE_USE_WIN32_THREADS_INIT)
-    message(FATAL_ERROR "Can't find a pthread or windows threads.")
-endif (CMAKE_USE_WIN32_THREADS_INIT)
-
 add_library(thread_primitives
-        thread_primitives.h
-        thread_primitives_${PLATFORM_SUFFIX}.cpp
+	thread_primitives.h
         )
     set_property(TARGET thread_primitives PROPERTY FOLDER "base")
+    set_property(TARGET thread_primitives PROPERTY LINKER_LANGUAGE CXX)
 
 cxx_test(thread_primitives_test thread_primitives_test.cpp
          thread_primitives timestamp)

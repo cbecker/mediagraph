@@ -28,65 +28,119 @@
 #ifndef THREAD_PRIMITIVES_H
 #define THREAD_PRIMITIVES_H
 
+#include <condition_variable>
+#include <functional>
+#include <future>
+#include <memory>
+#include <mutex>
+#include <thread>
+
 class ConditionVariablePrivate;
 class MutexPrivate;
 
 class Mutex {
-  public:
-    Mutex();
-	~Mutex();
-    void lock();
-    bool tryLock();
-    void unlock();
+public:
+  Mutex() = default;
+  void lock() { mutex_.lock(); }
+  bool tryLock() { return mutex_.try_lock(); }
+  void unlock() { mutex_.unlock(); }
 
-    MutexPrivate* impl_;
+  std::mutex mutex_;
 };
 
 //! Aquire a lock on the mutex passed to the constructor.
 //! The lock is maintained while the ScopedLock object is alive.
 //! The lock is released uppon destruction.
 class ScopedLock {
-  public:
-    ScopedLock(Mutex* mutex) : mutex_(mutex) { mutex->lock(); }
-    ~ScopedLock() { mutex_->unlock(); }
+public:
+  ScopedLock(Mutex *mutex) : mutex_(mutex) { mutex->lock(); }
+  ~ScopedLock() { mutex_->unlock(); }
 
-  private:
-    ScopedLock(const ScopedLock&) { }
-    ScopedLock& operator = (const ScopedLock&) { return *this; }
-    Mutex* mutex_;
+private:
+  ScopedLock(const ScopedLock &) {}
+  ScopedLock &operator=(const ScopedLock &) { return *this; }
+  Mutex *mutex_;
 };
 
 class ConditionVariable {
-  public:
-    ConditionVariable();
-    ~ConditionVariable();
-    
-    void signal();
-    void wakeAll();
-    void wait(Mutex* mutex);
+public:
+  ConditionVariable() = default;
 
-  private:
-    ConditionVariablePrivate* impl_;
+  void signal() { _condvar.notify_one(); }
+  void wakeAll() { _condvar.notify_all(); }
+  void wait(Mutex *mutex) {
+    std::unique_lock<std::mutex> ulock(mutex->mutex_, std::defer_lock);
+    _condvar.wait(ulock);
+  }
+
+private:
+  std::condition_variable _condvar;
 };
 
 class Thread {
-  public:
-    Thread();
-    ~Thread();
+public:
+  Thread() = default;
+  ~Thread() {
+    if (thread_.joinable()) {
+      thread_.detach();
+    }
+  }
 
-    bool start(int (*func)(void *), void *ptr);
+  bool start(int (*func)(void *), void *ptr) {
 
-    bool isRunning() const;
+    if (isRunning()) {
+      return false;
+    }
 
-    // Returns the thread exit value, as returned by 'func' above.
-    // returns -1 if the thread has never been started.
-    int waitForTermination();
+    // we may need to wait for the thread to finish, as it may be still
+    // terminating (flag running_ can be set before thread ends)
+    if (thread_.joinable())
+      thread_.join();
 
-    static void setCurrentName(const char *name);
+    // Wrap the function in a lambda to signal when the thread has finished
+    // processing
+    std::packaged_task<int(void *, std::weak_ptr<bool>)> task(
+        [func](void *p, std::weak_ptr<bool> runningFlag) {
+          const int retVal = func(p);
+          if (auto r = runningFlag.lock()) {
+            *r = false;
+          }
 
-  private:
-    void* thread_handle;
+          return retVal;
+        });
+    thread_ret_future_ = task.get_future();
+
+    *running_ = true;
+    thread_ =
+        std::thread(std::move(task), ptr, std::weak_ptr<bool>(this->running_));
+
+    return true;
+  }
+
+  bool isRunning() const { return *running_; }
+
+  // Returns the thread exit value, as returned by 'func' above.
+  // returns -1 if the thread has never been started.
+  int waitForTermination() {
+    if (thread_.joinable()) {
+      thread_.join();
+    }
+
+    // make sure we call .get() once. If called > 1 time it will throw an
+    // exception
+    return thread_ret_future_.valid() ? thread_ret_future_.get() : -1;
+  }
+
+  static void setCurrentName(const char *name) { (void)name; }
+
+private:
+  std::thread thread_;
+  std::future<int>
+      thread_ret_future_; // holds future return value of thread fn.
+
+  // the thread may outlive this class (see destructor's detach()), so we use a
+  // shared_ptr here
+  std::shared_ptr<bool> running_ = std::make_shared<bool>(false);
 };
 
-
-#endif  // THREAD_PRIMITIVES_H
+#endif // THREAD_PRIMITIVES_H
