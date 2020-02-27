@@ -3,6 +3,11 @@ cmake_minimum_required(VERSION 3.14.0)
 
 set (CMAKE_CXX_STANDARD 11)
 
+if(USE_CONAN)
+  include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+  conan_basic_setup()
+endif()
+
 find_package(Threads REQUIRED)
 find_package(GTest)
 

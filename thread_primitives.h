@@ -28,6 +28,7 @@
 #ifndef THREAD_PRIMITIVES_H
 #define THREAD_PRIMITIVES_H
 
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <future>
@@ -86,61 +87,53 @@ public:
     }
   }
 
-  bool start(int (*func)(void *), void *ptr) {
+  bool start(std::function<void(void *)> func, void *ptr) {
 
     if (isRunning()) {
       return false;
     }
 
-    // we may need to wait for the thread to finish, as it may be still
-    // terminating (flag running_ can be set before thread ends)
-    if (thread_.joinable())
-      thread_.join();
+    waitForTermination(); // thread may still be finishing, make sure we join it
 
     // Wrap the function in a lambda to signal when the thread has finished
-    // processing
-    std::packaged_task<int(void *, std::weak_ptr<bool>)> task(
-        [func](void *p, std::weak_ptr<bool> runningFlag) {
-          const int retVal = func(p);
-          if (auto r = runningFlag.lock()) {
-            *r = false;
-          }
+    // processing through a future
+    std::packaged_task<void(void *)> task(func);
+    running_future_ = task.get_future();
 
-          return retVal;
-        });
-    thread_ret_future_ = task.get_future();
-
-    *running_ = true;
-    thread_ =
-        std::thread(std::move(task), ptr, std::weak_ptr<bool>(this->running_));
+    thread_ = std::thread(std::move(task), ptr);
 
     return true;
   }
 
-  bool isRunning() const { return *running_; }
+  bool isRunning() const {
+    // (from c++ docs)
+    // vallid() == true: This is the case only for futures that were not
+    // default-constructed or moved from  until the first time get() or share()
+    // is called.
+    if (!running_future_.valid()) {
+      return false;
+    }
 
-  // Returns the thread exit value, as returned by 'func' above.
-  // returns -1 if the thread has never been started.
-  int waitForTermination() {
+    const auto status = running_future_.wait_for(std::chrono::seconds(0));
+    return status != std::future_status::ready;
+  }
+
+  void waitForTermination() {
     if (thread_.joinable()) {
       thread_.join();
     }
 
-    // make sure we call .get() once. If called > 1 time it will throw an
-    // exception
-    return thread_ret_future_.valid() ? thread_ret_future_.get() : -1;
+    // deal with the future accordingly
+    if (running_future_.valid()) {
+      running_future_.get();
+    }
   }
 
   static void setCurrentName(const char *name) { (void)name; }
 
 private:
   std::thread thread_;
-  std::future<int>
-      thread_ret_future_; // holds future return value of thread fn.
-
-  // the thread may outlive this class (see destructor's detach()), so we use a
-  // shared_ptr here
-  std::shared_ptr<bool> running_ = std::make_shared<bool>(false);
+  std::future<void> running_future_; // used to signal thread has finished
 };
 
 #endif // THREAD_PRIMITIVES_H

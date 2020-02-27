@@ -30,100 +30,98 @@
 #include "thread_primitives.h"
 #include "timestamp.h"
 
-static int return_arg(void *ptr) {
-    return (int) ((long)ptr);
-}
+static int return_arg(void *ptr) { return (int)((long)ptr); }
 
 TEST(ThreadTest, JoinValue) {
-    Thread thread;
-    EXPECT_TRUE(thread.start(return_arg, (void *)7));
-    EXPECT_EQ(7, thread.waitForTermination());
+  Thread thread;
+  EXPECT_TRUE(thread.start(return_arg, (void *)7));
+  thread.waitForTermination();
 }
 
 TEST(ThreadTest, BasicCreation) {
-    // Make sure the constructor and destructors work on unsued objects.
-    Thread unstarted;
+  // Make sure the constructor and destructors work on unsued objects.
+  Thread unstarted;
 }
 
 static int never_returns(void *ptr) {
-    while(1) {
-    }
+  while (1) {
+  }
 }
 
 TEST(ThreadTest, DeleteWhileRunning) {
-    Thread thread;
-    thread.start(never_returns, 0);
+  Thread thread;
+  thread.start(never_returns, 0);
 
-    // When thread goes out of scope, the thread should not prevent the test to
-    // timeout.
+  // When thread goes out of scope, the thread should not prevent the test to
+  // timeout.
 }
 
 static int wait_a_bit(void *ptr) {
-    Duration::milliSeconds(10).sleep();
-    if (ptr) {
-        *static_cast<int *>(ptr) = 1;
-    }
-    return 0;
+  Duration::milliSeconds(10).sleep();
+  if (ptr) {
+    *static_cast<int *>(ptr) = 1;
+  }
+  return 0;
 }
 
 TEST(ThreadTest, MultipleStarts) {
-    Thread thread;
-    int done = 0;
-    EXPECT_TRUE(thread.start(wait_a_bit, &done));
-    EXPECT_FALSE(thread.start(wait_a_bit, 0)); // already running
+  Thread thread;
+  int done = 0;
+  EXPECT_TRUE(thread.start(wait_a_bit, &done));
+  EXPECT_FALSE(thread.start(wait_a_bit, 0)); // already running
 
-    while (!done) {
-        Duration::milliSeconds(2).sleep();
-    }
+  while (!done) {
     Duration::milliSeconds(2).sleep();
+  }
+  Duration::milliSeconds(2).sleep();
 
-    // should work again.
-    ASSERT_TRUE(thread.start(wait_a_bit, 0));
+  // should work again.
+  ASSERT_TRUE(thread.start(wait_a_bit, 0));
 
-    EXPECT_EQ(0, thread.waitForTermination());
+  thread.waitForTermination();
 }
 
 // Verify the behavior of isRunning().
 TEST(ThreadTest, IsRunning) {
-    Thread thread;
-    // When instanciated, the thread shoud not be running.
-    EXPECT_FALSE(thread.isRunning());
+  Thread thread;
+  // When instanciated, the thread shoud not be running.
+  EXPECT_FALSE(thread.isRunning());
 
-	int done = 0;
-    EXPECT_TRUE(thread.start(wait_a_bit, &done));
+  int done = 0;
+  EXPECT_TRUE(thread.start(wait_a_bit, &done));
 
-    // We just started the thread, it should be running.
-    EXPECT_TRUE(thread.isRunning());
+  // We just started the thread, it should be running.
+  EXPECT_TRUE(thread.isRunning());
 
-	while (!done) {
-		Duration::milliSeconds(2).sleep();
-	}
-	Duration::milliSeconds(2).sleep();
+  while (!done) {
+    Duration::milliSeconds(2).sleep();
+  }
+  Duration::milliSeconds(2).sleep();
 
-    // We waited long enough: the thread should have returned.
-    EXPECT_FALSE(thread.isRunning());
+  // We waited long enough: the thread should have returned.
+  EXPECT_FALSE(thread.isRunning());
 
-    EXPECT_EQ(0, thread.waitForTermination());
-    EXPECT_FALSE(thread.isRunning());
+  thread.waitForTermination();
+  EXPECT_FALSE(thread.isRunning());
 }
 
 TEST(MutexTest, BasicTest) {
-    // A very basic test, single threaded.
-    Mutex mutex;
-    EXPECT_TRUE(mutex.tryLock());
-    EXPECT_FALSE(mutex.tryLock());
-    mutex.unlock();
-    mutex.lock();
-    EXPECT_FALSE(mutex.tryLock());
-    mutex.unlock();
+  // A very basic test, single threaded.
+  Mutex mutex;
+  EXPECT_TRUE(mutex.tryLock());
+  EXPECT_FALSE(mutex.tryLock());
+  mutex.unlock();
+  mutex.lock();
+  EXPECT_FALSE(mutex.tryLock());
+  mutex.unlock();
 }
 
 TEST(MutexTest, ScopedLockTest) {
-    Mutex mutex;
-    {
-        ScopedLock lock(&mutex);
-        EXPECT_FALSE(mutex.tryLock());
-    }
-    EXPECT_TRUE(mutex.tryLock());
-    mutex.unlock();
+  Mutex mutex;
+  {
+    ScopedLock lock(&mutex);
+    EXPECT_FALSE(mutex.tryLock());
+  }
+  EXPECT_TRUE(mutex.tryLock());
+  mutex.unlock();
 }
