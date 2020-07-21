@@ -25,16 +25,19 @@
 //
 
 #include "thread_primitives.h"
+#include "thread_platform.h"
 
 #include <chrono>
 
+namespace media_graph
+{
 Thread::~Thread() {
     if (thread_.joinable()) {
         thread_.detach();
     }
 }
 
-bool Thread::start(void (*func)(void *), void *ptr) {
+bool Thread::start(void (*func)(void *), void *ptr, const char* threadName) {
     if (isRunning()) {
         return false;
     }
@@ -47,6 +50,7 @@ bool Thread::start(void (*func)(void *), void *ptr) {
     running_future_ = task.get_future();
 
     thread_ = std::thread(std::move(task), ptr);
+    setThreadName(thread_, threadName);
 
     return true;
 }
@@ -74,4 +78,4 @@ void Thread::waitForTermination() {
         running_future_.get();
     }
 }
-
+} // namespace mediagraph

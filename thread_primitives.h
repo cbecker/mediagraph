@@ -35,12 +35,14 @@
 #include <mutex>
 #include <condition_variable>
 
+namespace media_graph
+{
 class Thread {
   public:
     Thread() = default;
     ~Thread();
 
-    bool start(void (*func)(void *), void *ptr);
+    bool start(void (*func)(void *), void *ptr, const char* threadName = nullptr);
 
     bool isRunning() const;
 
@@ -50,6 +52,7 @@ class Thread {
     std::thread thread_;
     std::future<void> running_future_;  // used to signal thread has finished
 };
+} // namespace mediagraph
 
 
 #endif  // THREAD_PRIMITIVES_H

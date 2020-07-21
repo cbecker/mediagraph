@@ -238,7 +238,7 @@ bool ThreadedNodeBase::start() {
 bool ThreadedNodeBase::startThread() {
     thread_must_quit_ = false;
     creating_thread_id_ = std::this_thread::get_id();
-    if (thread_.start(threadEntryPoint, this)) {
+    if (thread_.start(threadEntryPoint, this, this->name().c_str())) {
         return true;
     }
     return false;

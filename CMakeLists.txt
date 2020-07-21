@@ -29,6 +29,8 @@ endfunction()
 add_library(thread_primitives
         thread_primitives.h
         thread_primitives.cpp
+        thread_platform.h
+        thread_platform.cpp
         )
     set_property(TARGET thread_primitives PROPERTY FOLDER "base")
 
